@@ -23,7 +23,6 @@ class TokensClientExt:
         # Used to keep simultaneous refresh requests from spamming refresh endpoint
         self._token_refresh_lock = threading.Lock()
 
-
     def _is_valid_jwt_token(self, token: str, raise_if_expired: bool = False) -> bool:
         """Check if a token is a valid JWT token by attempting to decode its header and check expiration."""
         try:
@@ -35,14 +34,15 @@ class TokensClientExt:
         if expiration is None:
             raise ApiError(
                 status_code=401,
-                body={"detail": "API key does not have an expiration set, and is not valid. Please obtain a new refresh token."}
+                body={
+                    "detail": "API key does not have an expiration set, and is not valid. Please obtain a new refresh token."
+                },
             )
         expiration_time = datetime.fromtimestamp(expiration, timezone.utc)
         if expiration_time < datetime.now(timezone.utc):
             if raise_if_expired:
                 raise ApiError(
-                    status_code=401,
-                    body={"detail": "API key has expired. Please obtain a new refresh token."}
+                    status_code=401, body={"detail": "API key has expired. Please obtain a new refresh token."}
                 )
             else:
                 return False
@@ -73,21 +73,21 @@ class TokensClientExt:
                 if (not self._access_token) or (not self._is_valid_jwt_token(self._access_token)):
                     token_response = self.refresh()
                     self._set_access_token(token_response.access)
-        
+
         return self._access_token
 
     def refresh(self) -> AccessTokenResponse:
         """Refresh the access token and return the token response."""
         # We don't do this often, just use a separate httpx client for simplicity here
         # (avoids complicated state management and sync vs async handling)
-        with httpx.Client() as sync_client:
+        with httpx.Client(verify=False) as sync_client:
             response = sync_client.request(
                 method="POST",
                 url=f"{self._base_url}/api/token/refresh/",
                 json={"refresh": self._api_key},
                 headers={"Content-Type": "application/json"},
             )
-            
+
             if response.status_code == 200:
                 return AccessTokenResponse.parse_obj(response.json())
             else:
